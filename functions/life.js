@@ -1,5 +1,5 @@
-const dotenv = require("dotenv").config();
-const databaseId = process.env.NOTION_DATABASE_LIFE_ID;
+const functions = require("firebase-functions");
+const databaseId = functions.config().notion.databases.life_id;
 
 const getLifeTable = async (notion, date) => {
   const { results } = await notion.databases.query({
@@ -76,9 +76,16 @@ const formatDate = (date) => {
 };
 
 // overengineered method for increasing counter without any edgecases lol; ex: 9) => 10)
-const formatName = (name) => {
+const newFormatName = (name) => {
   const countArray = name.match(/^\d+[)]/);
-  return countArray ? `${parseInt(countArray[0].split(")")[0])++}) ${name.split(")").slice(1).join("")}` : `2) ${name}`
+  const bruh = countArray
+    ? `${parseInt(countArray[0].split(")")[0]) + 1}) ${name
+        .split(")")
+        .slice(1)
+        .join("")}`
+    : `2) ${name}`;
+
+  return bruh;
 };
 
 // check streak, whether to increase or return to zero; if undefined, assume day 1
@@ -86,7 +93,7 @@ const newStreak = (count, isChecked) => {
   return 1 + (isChecked ? count || 1 : 0);
 };
 
-addToTable = async (notion, props, newDateRange) => {
+addToTable = async (notion, props, newDateRange, name) => {
   await notion.pages.create({
     parent: {
       database_id: databaseId,
@@ -96,7 +103,7 @@ addToTable = async (notion, props, newDateRange) => {
       Name: {
         title: [
           {
-            text: { content: formatName(props.Name.title[0].text.content) },
+            text: { content: name },
           },
         ],
       },
@@ -114,6 +121,10 @@ addToTable = async (notion, props, newDateRange) => {
   });
 };
 
+// needed for the multiple day structure
+// todo, but for now, just go ez way out
+const updateStreak = async (notion, pageId) => {};
+
 // number of repeated blocks you want in Calendar
 const maxRepeats = 1;
 
@@ -127,20 +138,24 @@ const dailyLife = async (notion) => {
       dt.properties.Date.date
     );
     let repeat = 0;
+    let tommorowName = newFormatName(dt.properties.Name.title[0].text.content);
+
     while (repeat < maxRepeats) {
       if (dt.properties.Repeat.select.name === "None") break;
 
+      // this step can be optimized
       const newDayTodos = await getLifeTable(notion, new Date(dateRange.start));
 
       const hasDuplicates = newDayTodos.find(
         (nt) =>
-        // to compare, today's name is equal to tomorrow's so you can reuse the function
-          formatName(dt.properties.Name.title[0].text.content) ===
-          nt.properties.Name.title[0].text.content
+          // to compare, today's name is equal to tomorrow's so you can reuse the function
+          tommorowName === nt.properties.Name.title[0].text.content
       );
 
       if (!hasDuplicates) {
-        addToTable(notion, dt.properties, dateRange);
+        addToTable(notion, dt.properties, dateRange, tommorowName);
+        // updates the name again, to the next day
+        tommorowName = newFormatName(tommorowName);
       } else if (repeat === maxRepeats - 1) {
         break;
       }
