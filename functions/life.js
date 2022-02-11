@@ -78,17 +78,16 @@ const formatDate = (date) => {
 // overengineered method for increasing counter without any edgecases lol; ex: 9) => 10)
 const newFormatName = (name) => {
   const countArray = name.match(/^\d+[)]/);
-  const bruh = countArray
+  return countArray
     ? `${parseInt(countArray[0].split(")")[0]) + 1}) ${name
         .split(")")
         .slice(1)
         .join("")}`
     : `2) ${name}`;
-
-  return bruh;
 };
 
 // check streak, whether to increase or return to zero; if undefined, assume day 1
+// v2 todo -> for multiple day type events, add additional logic, for now just stick with segmented
 const newStreak = (count, isChecked) => {
   return 1 + (isChecked ? count || 1 : 0);
 };
@@ -130,7 +129,11 @@ const maxRepeats = 1;
 
 //main function
 const dailyLife = async (notion) => {
-  const dailyTodos = await getLifeTable(notion, new Date());
+  // sets + checks yesterday
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+
+  const dailyTodos = await getLifeTable(notion, y);
 
   dailyTodos.map(async (dt) => {
     let dateRange = getNewDateRange(
@@ -138,7 +141,7 @@ const dailyLife = async (notion) => {
       dt.properties.Date.date
     );
     let repeat = 0;
-    let tommorowName = newFormatName(dt.properties.Name.title[0].text.content);
+    let nextName = newFormatName(dt.properties.Name.title[0].text.content);
 
     while (repeat < maxRepeats) {
       if (dt.properties.Repeat.select.name === "None") break;
@@ -148,14 +151,14 @@ const dailyLife = async (notion) => {
 
       const hasDuplicates = newDayTodos.find(
         (nt) =>
-          // to compare, today's name is equal to tomorrow's so you can reuse the function
-          tommorowName === nt.properties.Name.title[0].text.content
+          // to compare, today's name is equal to next time's name so you can reuse the function
+          nextName === nt.properties.Name.title[0].text.content
       );
 
       if (!hasDuplicates) {
-        addToTable(notion, dt.properties, dateRange, tommorowName);
+        addToTable(notion, dt.properties, dateRange, nextName);
         // updates the name again, to the next day
-        tommorowName = newFormatName(tommorowName);
+        nextName = newFormatName(nextName);
       } else if (repeat === maxRepeats - 1) {
         break;
       }
